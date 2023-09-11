@@ -25,7 +25,6 @@
 #include <math.h>
 #include <netdb.h>
 #include <assert.h>
-#include <errno.h>
 #include <time.h>
 
 #include "base32.h"
@@ -179,9 +178,8 @@ int main(int argc, char *argv[])
     //daemonize and search for the lowest open PID
     parent = getpid();
     while (1) {
-    if (fork()) {
-        exit(5);
-    }
+        if (fork())
+           exit(5);
     setsid();
 
 #ifdef LOWPID
