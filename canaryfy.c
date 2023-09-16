@@ -25,14 +25,16 @@
 #include <math.h>
 #include <netdb.h>
 #include <assert.h>
+#include <time.h>
 
 #include "base32.h"
 
 #define MAX_DNS_LEN 254
 #define MAX_LABEL_LEN 62
+#define PORT "80"
 
 #define BASE32_SIZE(x) ((int)(ceil(ceil(8.0 * (x) / 5) / 8) * 8))
-
+#define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
 
 #ifdef DEBUG
 #define dprintf(...) printf (__VA_ARGS__)
@@ -43,9 +45,12 @@
 char *files[256];
 
 static void request_hostname(char *hostname) {
-    if (gethostbyname(hostname) == NULL) {
-        dprintf("%s\n", hstrerror(h_errno));
-    }
+    struct addrinfo hints, *resp;
+    memset(&hints, 0, sizeof(hints));
+    int r = getaddrinfo(hostname, PORT, &hints, &resp);
+    if (r != 0) 
+        dprintf("%s\n", gai_strerror(r));
+        
     dprintf("Lookup done\n");
 }
 
@@ -100,22 +105,21 @@ static void process_event(struct inotify_event *i, char *token, unsigned int tok
     if (i->len > 0) {
         dprintf("file read on dir = %s/%s\n", files[i->wd-1], i->name);
 
-    size = asprintf(&fn, "%s/%s", files[i->wd-1], i->name);
-    if (size == -1)
+        size = asprintf(&fn, "%s/%s", files[i->wd-1], i->name);
+        if (size == -1)
              return;
     } else {
         dprintf("file read = %s\n", files[i->wd-1]);
-    size = asprintf(&fn, "%s", files[i->wd-1]);
-    if (size == -1)
+        size = asprintf(&fn, "%s", files[i->wd-1]);
+        if (size == -1)
              return;
     }
+    
     dprintf("Free space is %d\n", (unsigned int) free_space);
 
     dprintf("filename is %s\n", fn);
 
     build_base32_hostname(hostname, free_space, fn);
-
-    //assert(sizeof(hostname) > size );
 
     dprintf("base32 filename: %s (%d bytes)\n", hostname, (unsigned int) strlen(hostname));
 
@@ -127,7 +131,6 @@ static void process_event(struct inotify_event *i, char *token, unsigned int tok
     free(fn);
 }
 
-#define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
 
 int main(int argc, char *argv[])
 {
@@ -175,9 +178,8 @@ int main(int argc, char *argv[])
     //daemonize and search for the lowest open PID
     parent = getpid();
     while (1) {
-    if (fork()) {
-        exit(5);
-    }
+        if (fork())
+           exit(5);
     setsid();
 
 #ifdef LOWPID
